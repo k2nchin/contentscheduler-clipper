@@ -173,6 +173,13 @@ if [ "$listo" != "si" ]; then
   exit 1
 fi
 
+# init.sql se quedó atrás respecto al esquema: sin esto, crear la cuenta falla.
+if [ -x scripts/poner-al-dia-la-base.sh ]; then
+  say "Poniendo la base de datos al día."
+  ./scripts/poner-al-dia-la-base.sh >/dev/null 2>&1 && ok "Base al día" || bad "No se pudo poner la base al día; córrelo a mano: ./scripts/poner-al-dia-la-base.sh"
+  $DC restart frontend >/dev/null 2>&1 || true
+fi
+
 say "El motor está vivo."
 echo "   API      : http://localhost:8000/docs"
 echo "   Web      : http://localhost:${WEB_PORT}"
