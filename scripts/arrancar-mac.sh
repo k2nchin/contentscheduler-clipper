@@ -156,6 +156,10 @@ ok "Configurado: ${RESUMEN}"
 say "Levantando el motor. La primera vez tarda bastante: se construyen las imágenes."
 $DC up -d
 
+# El puerto de la web sale del .env, no de una suposición.
+WEB_PORT="$(grep '^FRONTEND_PORT=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+WEB_PORT="${WEB_PORT:-3001}"
+
 say "Esperando a que la API conteste…"
 listo=no
 for _ in $(seq 1 60); do
@@ -171,9 +175,10 @@ fi
 
 say "El motor está vivo."
 echo "   API      : http://localhost:8000/docs"
-echo "   Web      : http://localhost:3001"
+echo "   Web      : http://localhost:${WEB_PORT}"
 echo
-echo "Ahora, en la web, créate la cuenta y saca una clave en Ajustes → Claves de API."
+echo "Ahora, en la web, créate la cuenta y saca una clave aquí:"
+echo "   http://localhost:${WEB_PORT}/settings/api-keys"
 echo "Esa clave (sk_…) es la que va en el iPhone, en Ajustes → Motor de clipping."
 echo
 echo "Para usarlo desde la calle: ./scripts/tunel.sh"
