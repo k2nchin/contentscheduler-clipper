@@ -180,6 +180,7 @@ def subir(creds, clip: Path, destino: str | None = None) -> str | None:
         global _pausa_hasta, _ya_avisado
         # El fallo más común con diferencia: la carpeta no está compartida.
         if r.status_code in (403, 404):
+            log.error("No se pudo subir %s: Drive dice %s.", clip.name, r.status_code)
             if not _ya_avisado:
                 log.error(
                     "Drive dice %s, así que el destino está mal. Dos cosas que mirar:",
@@ -227,6 +228,11 @@ def vuelta(creds) -> None:
         log.info("Subiendo %s (%.1f MB)%s", clip.name, clip.stat().st_size / 1e6, etiqueta)
         ident = subir(creds, clip, destino)
         if not ident:
+            # Si el destino está mal, el resto de la tanda va a fallar igual:
+            # mejor parar que mandar cien megas para recibir el mismo no.
+            if time.time() < _pausa_hasta:
+                log.info("Dejo el resto para cuando esté arreglado.")
+                return
             continue
         testigo(clip).write_text(ident)
         log.info("Subido: %s", ident)
