@@ -184,9 +184,13 @@ say "El motor está vivo."
 echo "   API      : http://localhost:8000/docs"
 echo "   Web      : http://localhost:${WEB_PORT}"
 echo
-echo "Ahora, en la web, créate la cuenta y saca una clave aquí:"
-echo "   http://localhost:${WEB_PORT}/settings/api-keys"
-echo "Esa clave (sk_…) es la que va en el iPhone, en Ajustes → Motor de clipping."
+echo
+echo "No hace falta entrar en la web: la clave del iPhone sale de aquí."
+if [ -x scripts/clave-para-el-iphone.sh ]; then
+  ./scripts/clave-para-el-iphone.sh || true
+else
+  echo "   ./scripts/clave-para-el-iphone.sh"
+fi
 echo
 echo "Para usarlo desde la calle: ./scripts/tunel.sh"
 echo "Para apagarlo: $DC down"
