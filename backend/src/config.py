@@ -219,6 +219,9 @@ class Config:
             [
                 "http://localhost:3107",
                 "http://sp.localhost:3107",
+                # Las herramientas de escritorio, servidas en el mismo ordenador.
+                "http://localhost:3200",
+                "http://127.0.0.1:3200",
             ],
         )
         self.aws_region = self._get_optional_env("AWS_REGION")

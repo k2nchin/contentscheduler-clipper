@@ -607,6 +607,17 @@ services:
       - backend
     restart: unless-stopped
 
+  # Las herramientas de clipping, sin cuentas ni inicio de sesión: una página
+  # que habla directamente con la API usando la clave. Nada de Next.js.
+  escritorio:
+    image: nginx:1.29-alpine
+    container_name: supoclip-escritorio
+    ports:
+      - "${ESCRITORIO_PORT:-3200}:80"
+    volumes:
+      - ./escritorio:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
   # Redis for caching and job queues (useful for video processing)
   redis:
     image: redis:7-alpine
