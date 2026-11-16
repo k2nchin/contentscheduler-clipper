@@ -630,10 +630,15 @@ services:
       - ./drive/credenciales:/credenciales:ro
     environment:
       - GOOGLE_DRIVE_SA_JSON=/credenciales/cuenta-de-servicio.json
+      # Para poder nombrar cada carpeta con el video del que salieron los clips.
+      - DRIVE_DATABASE_URL=postgresql://supoclip:supoclip_password@postgres:5432/supoclip
+      - DRIVE_ORGANIZAR=${DRIVE_ORGANIZAR:-true}
       - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID:-}
       - CLIPS_DIR=/app/uploads/clips
       - DRIVE_BORRAR_LOCAL=${DRIVE_BORRAR_LOCAL:-false}
       - DRIVE_INTERVALO=${DRIVE_INTERVALO:-15}
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   # Graba un directo y va clipeando por trozos mientras sigue en vivo.

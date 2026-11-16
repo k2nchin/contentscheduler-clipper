@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 import google.auth.transport.requests
+import psycopg
 import requests
 from google.oauth2 import service_account
 
@@ -46,6 +47,13 @@ ALCANCE = ["https://www.googleapis.com/auth/drive.file"]
 # Un archivo a medio escribir no se sube: tiene que llevar quieto este rato.
 ESPERA_ESTABLE = 6
 
+# Para poder nombrar las carpetas con el video del que salió cada clip.
+BD = os.getenv("DRIVE_DATABASE_URL", "postgresql://supoclip:supoclip_password@postgres:5432/supoclip")
+ORGANIZAR = os.getenv("DRIVE_ORGANIZAR", "true").lower() != "false"
+
+# Carpetas de Drive ya creadas, para no preguntar por cada clip.
+_carpetas: dict[str, str] = {}
+
 
 def credenciales():
     if not CARPETA:
@@ -59,6 +67,76 @@ def credenciales():
     except Exception as e:
         log.error("El json de la cuenta de servicio no sirve: %s", e)
         return None
+
+
+def origen(nombre: str) -> tuple[str, str] | None:
+    """De qué video salió este clip: (identificador del trabajo, título)."""
+    try:
+        with psycopg.connect(BD, connect_timeout=10) as con, con.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.id, COALESCE(NULLIF(s.title, ''), s.url, 'Sin titulo'),
+                       to_char(t.created_at, 'YYYY-MM-DD')
+                FROM generated_clips g
+                JOIN tasks t ON t.id = g.task_id
+                LEFT JOIN sources s ON s.id = t.source_id
+                WHERE g.filename = %s
+                LIMIT 1
+                """,
+                (nombre,),
+            )
+            fila = cur.fetchone()
+    except Exception as e:
+        log.warning("No pude mirar de qué video salió %s: %s", nombre, e)
+        return None
+    if not fila:
+        return None
+    ident, titulo, fecha = fila
+    return ident, f"{fecha} · {limpiar(titulo)}"
+
+
+def limpiar(titulo: str) -> str:
+    """Un nombre de carpeta corto y sin caracteres que molesten."""
+    malos = '\\/:*?"<>|'
+    limpio = "".join(" " if c in malos else c for c in (titulo or "")).strip()
+    limpio = " ".join(limpio.split())
+    return (limpio[:70] or "Sin titulo")
+
+
+def carpeta_para(creds, trabajo: str, nombre: str) -> str:
+    """Devuelve la carpeta de Drive de ese video, creándola la primera vez."""
+    if trabajo in _carpetas:
+        return _carpetas[trabajo]
+    creds.refresh(google.auth.transport.requests.Request())
+    cabecera = {"Authorization": f"Bearer {creds.token}"}
+
+    # Si ya existe de una vuelta anterior, se reutiliza en vez de duplicarla.
+    consulta = (f"name = '{nombre.replace(chr(39), chr(92) + chr(39))}' and "
+                f"'{CARPETA}' in parents and "
+                "mimeType = 'application/vnd.google-apps.folder' and trashed = false")
+    r = requests.get("https://www.googleapis.com/drive/v3/files",
+                     params={"q": consulta, "fields": "files(id)", "supportsAllDrives": "true",
+                             "includeItemsFromAllDrives": "true"},
+                     headers=cabecera, timeout=60)
+    if r.status_code < 300:
+        encontradas = (r.json() or {}).get("files") or []
+        if encontradas:
+            _carpetas[trabajo] = encontradas[0]["id"]
+            return _carpetas[trabajo]
+
+    r = requests.post("https://www.googleapis.com/drive/v3/files",
+                      params={"supportsAllDrives": "true"},
+                      headers={**cabecera, "Content-Type": "application/json"},
+                      json={"name": nombre, "parents": [CARPETA],
+                            "mimeType": "application/vnd.google-apps.folder"},
+                      timeout=60)
+    if r.status_code >= 300:
+        log.warning("No pude crear la carpeta «%s»: %s", nombre, r.status_code)
+        return CARPETA
+    ident = (r.json() or {}).get("id") or CARPETA
+    _carpetas[trabajo] = ident
+    log.info("Carpeta nueva en Drive: %s", nombre)
+    return ident
 
 
 def testigo(clip: Path) -> Path:
@@ -83,10 +161,10 @@ _pausa_hasta = 0.0
 _ya_avisado = False
 
 
-def subir(creds, clip: Path) -> str | None:
+def subir(creds, clip: Path, destino: str | None = None) -> str | None:
     """Sube el archivo entero de una vez y devuelve su identificador en Drive."""
     creds.refresh(google.auth.transport.requests.Request())
-    datos = {"name": clip.name, "parents": [CARPETA]}
+    datos = {"name": clip.name, "parents": [destino or CARPETA]}
     with clip.open("rb") as f:
         r = requests.post(
             "https://www.googleapis.com/upload/drive/v3/files",
@@ -138,8 +216,16 @@ def vuelta(creds) -> None:
             continue
         if testigo(clip).exists() or not estable(clip):
             continue
-        log.info("Subiendo %s (%.1f MB)", clip.name, clip.stat().st_size / 1e6)
-        ident = subir(creds, clip)
+        destino = CARPETA
+        etiqueta = ""
+        if ORGANIZAR:
+            datos = origen(clip.name)
+            if datos:
+                trabajo, nombre = datos
+                destino = carpeta_para(creds, trabajo, nombre)
+                etiqueta = f" → {nombre}"
+        log.info("Subiendo %s (%.1f MB)%s", clip.name, clip.stat().st_size / 1e6, etiqueta)
+        ident = subir(creds, clip, destino)
         if not ident:
             continue
         testigo(clip).write_text(ident)

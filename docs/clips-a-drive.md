@@ -62,6 +62,31 @@ docker-compose logs -f drive
 Tiene que decir **"Vigilando /app/uploads/clips"**. A partir de ahí, cada clip nuevo
 aparece en tu carpeta de Drive a los pocos segundos de salir del horno.
 
+## Cómo quedan ordenados
+
+Cada video tiene su propia carpeta dentro de la que elegiste, nombrada con la
+fecha y el título:
+
+```
+Clips/
+├── 2026-11-16 · La Mansión VIP - Gala 3/
+│   ├── clip_1_0458-0538.mp4
+│   ├── clip_2_0701-0745.mp4
+│   └── clip_3_1019-1107.mp4
+└── 2026-11-16 · Alofoke - El debate/
+    └── clip_1_0912-0947.mp4
+```
+
+El nombre sale del propio motor, que guarda de qué video vino cada clip. Si por
+lo que sea no lo sabe, el clip cae suelto en la carpeta principal en vez de
+perderse.
+
+Si prefieres todo junto, sin carpetas:
+
+```bash
+DRIVE_ORGANIZAR=false
+```
+
 ## Si quieres que no ocupen el disco del Mac
 
 ```bash
