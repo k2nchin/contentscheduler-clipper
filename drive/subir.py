@@ -180,15 +180,21 @@ def subir(creds, clip: Path, destino: str | None = None) -> str | None:
         global _pausa_hasta, _ya_avisado
         # El fallo más común con diferencia: la carpeta no está compartida.
         if r.status_code in (403, 404):
-            log.error("No se pudo subir %s: Drive dice %s.", clip.name, r.status_code)
+            log.error("No se pudo subir %s: Drive dice %s (%s).",
+                      clip.name, r.status_code, motivo_de_google(r))
             if not _ya_avisado:
-                log.error(
-                    "Drive dice %s, así que el destino está mal. Dos cosas que mirar:",
-                    r.status_code,
-                )
-                log.error("  1. Que GOOGLE_DRIVE_FOLDER_ID sea solo el id, no la dirección entera.")
-                log.error("  2. Que esa carpeta esté compartida como Editor con:")
-                log.error("     %s", correo_de_la_cuenta())
+                razon = motivo_de_google(r)
+                if "storageQuota" in razon or "quota" in razon.lower():
+                    # Lo más habitual: una cuenta de servicio no tiene disco propio.
+                    log.error("Una cuenta de servicio no tiene espacio propio en Drive, así que")
+                    log.error("puede crear carpetas pero no guardar archivos. Hace falta una")
+                    log.error("unidad compartida. Está explicado en docs/clips-a-drive.md")
+                elif r.status_code == 404:
+                    log.error("Esa carpeta no existe para la cuenta de servicio.")
+                    log.error("Revisa que GOOGLE_DRIVE_FOLDER_ID sea solo el id de la carpeta.")
+                else:
+                    log.error("La carpeta tiene que estar compartida como Editor con:")
+                    log.error("     %s", correo_de_la_cuenta())
                 log.error("Reviso otra vez en %d minutos.", ESPERA_TRAS_FALLO_DE_CONFIGURACION // 60)
                 _ya_avisado = True
             _pausa_hasta = time.time() + ESPERA_TRAS_FALLO_DE_CONFIGURACION
@@ -197,6 +203,17 @@ def subir(creds, clip: Path, destino: str | None = None) -> str | None:
         return None
     _ya_avisado = False
     return (r.json() or {}).get("id")
+
+
+def motivo_de_google(r) -> str:
+    """El porqué exacto que manda Google, que es lo que distingue un caso de otro."""
+    try:
+        error = (r.json() or {}).get("error") or {}
+        listado = error.get("errors") or []
+        razon = listado[0].get("reason") if listado else ""
+        return f"{razon}: {error.get('message', '')}".strip(": ") or r.text[:120]
+    except Exception:
+        return r.text[:120]
 
 
 def correo_de_la_cuenta() -> str:
