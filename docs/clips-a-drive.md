@@ -49,24 +49,28 @@ no ha pasado la revisión de Google, que solo hace falta para publicarla.
 Al terminar deja `drive/credenciales/usuario.json`. Ese archivo **es una llave
 de tu Drive**: no lo subas a ningún sitio ni lo pegues en un chat.
 
-## Paso 3 — La carpeta
+## Paso 3 — La carpeta: no hay que hacer nada
 
-En tu Drive, crea una carpeta y copia su identificador de la barra de
-direcciones; es el trozo final:
+El subidor crea en tu Drive una carpeta llamada **Content Scheduler** y trabaja
+ahí dentro. No tienes que crearla ni compartirla.
 
-```
-https://drive.google.com/drive/folders/1a2B3c4D5e6F7g8H9i
-                                        └──── esto ────┘
-```
+Es a propósito. El permiso que le diste es el más estrecho que ofrece Google,
+`drive.file`: la app **solo ve lo que ella misma crea**, y no puede leer ni
+tocar el resto de tu Drive. El precio es que tampoco puede escribir dentro de
+una carpeta que hiciste tú a mano — si le indicas una, Google responde
+`insufficientParentPermissions`.
 
-Al usar tu propia cuenta **no hace falta compartirla con nadie**.
+Si quieres otro nombre: `DRIVE_CARPETA=Mis clips` en el `.env`.
+
+Y si de verdad necesitas que vaya a una carpeta concreta que ya existe, mueve
+la que crea la app a donde quieras desde el propio Drive: seguirá siendo suya y
+funcionando.
 
 ## Paso 4 — Encenderlo
 
 En el `.env`:
 
 ```bash
-GOOGLE_DRIVE_FOLDER_ID=1a2B3c4D5e6F7g8H9i
 COMPOSE_PROFILES=drive          # si ya tenías otros, sepáralos con comas
 ```
 
@@ -126,8 +130,8 @@ Sin credenciales, el servicio se queda dormido: el motor sigue funcionando igual
 | Qué dice el registro | Qué pasa |
 |---|---|
 | `storageQuotaExceeded` | Estás usando una cuenta de servicio. Autoriza la tuya: `python3 drive/autorizar.py` |
+| `insufficientParentPermissions` | Le indicaste una carpeta que no creó la app. Quita `GOOGLE_DRIVE_FOLDER_ID` del .env |
 | `Drive dice 404` | El identificador de la carpeta está mal, o es de otra cuenta |
-| `Drive dice 403` sin cuota | La carpeta no es de la cuenta que autorizaste |
 | `El permiso de tu cuenta no sirve` | Caducó o lo revocaste. Vuelve a autorizar |
 | No dice nada nunca | Todavía no has cortado ningún clip |
 

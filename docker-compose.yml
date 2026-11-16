@@ -635,6 +635,7 @@ services:
       - DRIVE_DATABASE_URL=postgresql://supoclip:supoclip_password@postgres:5432/supoclip
       - DRIVE_ORGANIZAR=${DRIVE_ORGANIZAR:-true}
       - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID:-}
+      - DRIVE_CARPETA=${DRIVE_CARPETA:-Content Scheduler}
       - CLIPS_DIR=/app/uploads/clips
       - DRIVE_BORRAR_LOCAL=${DRIVE_BORRAR_LOCAL:-false}
       - DRIVE_INTERVALO=${DRIVE_INTERVALO:-15}

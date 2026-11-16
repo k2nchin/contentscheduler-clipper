@@ -40,7 +40,10 @@ log = logging.getLogger("drive")
 SA_JSON = os.getenv("GOOGLE_DRIVE_SA_JSON", "/credenciales/cuenta-de-servicio.json")
 # Permiso duradero sobre TU cuenta, de drive/autorizar.py. Si existe, manda.
 USUARIO_JSON = os.getenv("GOOGLE_DRIVE_USER_JSON", "/credenciales/usuario.json")
+# Vacío: la app se crea su propia carpeta y trabaja ahí. Eso es lo normal,
+# porque el permiso que pedimos solo alcanza a lo que la propia app crea.
 CARPETA = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+NOMBRE_RAIZ = os.getenv("DRIVE_CARPETA", "Content Scheduler").strip() or "Content Scheduler"
 CLIPS = Path(os.getenv("CLIPS_DIR", "/app/uploads/clips"))
 BORRAR = os.getenv("DRIVE_BORRAR_LOCAL", "false").lower() == "true"
 INTERVALO = max(5, int(os.getenv("DRIVE_INTERVALO", "15")))
@@ -60,10 +63,6 @@ _carpetas: dict[str, str] = {}
 
 def credenciales():
     """Tu cuenta si la autorizaste; si no, la cuenta de servicio."""
-    if not CARPETA:
-        log.error("Falta GOOGLE_DRIVE_FOLDER_ID. Mira docs/clips-a-drive.md")
-        return None
-
     if Path(USUARIO_JSON).is_file():
         try:
             datos = json.loads(Path(USUARIO_JSON).read_text())
@@ -217,9 +216,12 @@ def subir(creds, clip: Path, destino: str | None = None) -> str | None:
                 elif r.status_code == 404:
                     log.error("Esa carpeta no existe para la cuenta de servicio.")
                     log.error("Revisa que GOOGLE_DRIVE_FOLDER_ID sea solo el id de la carpeta.")
+                elif "ParentPermissions" in razon:
+                    log.error("Esa carpeta no la creó esta app, y el permiso que diste solo")
+                    log.error("alcanza a lo que ella misma crea. Quita GOOGLE_DRIVE_FOLDER_ID")
+                    log.error("del .env y se hará su propia carpeta «%s» en tu Drive.", NOMBRE_RAIZ)
                 else:
-                    log.error("La carpeta tiene que estar compartida como Editor con:")
-                    log.error("     %s", correo_de_la_cuenta())
+                    log.error("Revisa que esa carpeta sea de la cuenta que autorizaste.")
                 log.error("Reviso otra vez en %d minutos.", ESPERA_TRAS_FALLO_DE_CONFIGURACION // 60)
                 _ya_avisado = True
             _pausa_hasta = time.time() + ESPERA_TRAS_FALLO_DE_CONFIGURACION
@@ -286,13 +288,51 @@ def vuelta(creds) -> None:
                 log.warning("No se pudo borrar %s: %s", clip.name, e)
 
 
+def buscar_o_crear(creds, nombre: str, dentro: str | None = None) -> str | None:
+    """La carpeta con ese nombre, creándola si no existe. Devuelve su id."""
+    creds.refresh(google.auth.transport.requests.Request())
+    cabecera = {"Authorization": f"Bearer {creds.token}"}
+    escapado = nombre.replace("'", "\\'")
+    padre = dentro or "root"
+    consulta = (f"name = '{escapado}' and '{padre}' in parents and "
+                "mimeType = 'application/vnd.google-apps.folder' and trashed = false")
+    r = requests.get("https://www.googleapis.com/drive/v3/files",
+                     params={"q": consulta, "fields": "files(id)", "supportsAllDrives": "true",
+                             "includeItemsFromAllDrives": "true"},
+                     headers=cabecera, timeout=60)
+    if r.status_code < 300 and (r.json() or {}).get("files"):
+        return r.json()["files"][0]["id"]
+
+    r = requests.post("https://www.googleapis.com/drive/v3/files",
+                      params={"supportsAllDrives": "true"},
+                      headers={**cabecera, "Content-Type": "application/json"},
+                      json={"name": nombre, "parents": [padre],
+                            "mimeType": "application/vnd.google-apps.folder"},
+                      timeout=60)
+    if r.status_code >= 300:
+        log.error("No pude crear la carpeta «%s»: %s (%s)", nombre, r.status_code, motivo_de_google(r))
+        return None
+    return (r.json() or {}).get("id")
+
+
 def main() -> int:
+    global CARPETA
     creds = credenciales()
     if creds is None:
         log.info("Sin configurar: no voy a subir nada. Esto no rompe el motor.")
         while True:
             time.sleep(3600)
-    log.info("Vigilando %s cada %ss. Carpeta de Drive: %s", CLIPS, INTERVALO, CARPETA)
+    if not CARPETA:
+        # El permiso solo alcanza a lo que la app crea, así que se hace su carpeta.
+        CARPETA = buscar_o_crear(creds, NOMBRE_RAIZ) or ""
+        if not CARPETA:
+            log.error("No pude preparar la carpeta en tu Drive. ¿Autorizaste bien?")
+            return 1
+        log.info("Carpeta en tu Drive: «%s» (%s)", NOMBRE_RAIZ, CARPETA)
+    else:
+        log.info("Carpeta de Drive indicada a mano: %s", CARPETA)
+
+    log.info("Vigilando %s cada %ss.", CLIPS, INTERVALO)
     if BORRAR:
         log.warning("DRIVE_BORRAR_LOCAL está puesto: los clips se borran del disco tras subirlos.")
     while True:
