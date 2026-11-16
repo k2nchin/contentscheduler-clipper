@@ -23,7 +23,10 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$PG"; then
   exit 1
 fi
 
-sql() { docker exec -i "$PG" psql -U "$USUARIO" -d "$DB" -tAc "$1"; }
+sql() { docker exec -i "$PG" psql -U "$USUARIO" -d "$DB" -tAqc "$1"; }
+
+# psql puede colar avisos junto al resultado; nos quedamos con la última línea con algo.
+un_valor() { sql "$1" | grep -v '^[[:space:]]*$' | tail -1 | tr -d '[:space:]'; }
 
 # La clave: el mismo formato que genera el servidor (sk_ + 32 bytes en base64url).
 CLAVE="sk_$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
@@ -31,14 +34,22 @@ HASH="$(printf '%s' "$CLAVE" | shasum -a 256 | cut -d' ' -f1)"
 PREFIJO="${CLAVE:0:11}"
 
 # El usuario, si no estaba ya. Correo dado por verificado: aquí no hay a quién verificar.
-ID="$(sql "SELECT id FROM users WHERE email = '${CORREO}'" | tr -d '[:space:]')"
+ID="$(un_valor "SELECT id FROM users WHERE email = '${CORREO}'")"
 if [ -z "$ID" ]; then
-  ID="$(sql "INSERT INTO users (name, email, \"emailVerified\", is_admin)
-             VALUES ('iPhone', '${CORREO}', true, true) RETURNING id" | tr -d '[:space:]')"
-  [ -n "$ID" ] || { bad "No se pudo crear el usuario. ¿Corriste ./scripts/poner-al-dia-la-base.sh?"; exit 1; }
+  sql "INSERT INTO users (name, email, \"emailVerified\", is_admin)
+       VALUES ('iPhone', '${CORREO}', true, true)
+       ON CONFLICT (email) DO NOTHING" >/dev/null
+  ID="$(un_valor "SELECT id FROM users WHERE email = '${CORREO}'")"
   say "Usuario creado para el iPhone (${CORREO})."
 else
   say "Ya había un usuario para ${CORREO}; le añado una clave nueva."
+fi
+
+# Un identificador es un uuid de 36 caracteres: si no lo es, algo se coló.
+if [ "${#ID}" -ne 36 ]; then
+  bad "No pude leer el identificador del usuario (salió «${ID}»)."
+  bad "¿Corriste ./scripts/poner-al-dia-la-base.sh?"
+  exit 1
 fi
 
 sql "INSERT INTO api_keys (user_id, name, key_hash, key_prefix)
