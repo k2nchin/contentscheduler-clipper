@@ -55,38 +55,62 @@ else
   exit 1
 fi
 
-# ------------------------------------------------------------------ Ollama
+# ------------------------------------------------------------------ quién elige los momentos
 
-if ! command -v ollama >/dev/null 2>&1; then
-  say "Falta Ollama, que es el que elige los momentos. Lo instalo."
-  if ! command -v brew >/dev/null 2>&1; then
-    bad "Necesitas Homebrew para esto. Instálalo y repite."
+# Un modelo local de 20B pide unos 16 GB para él solo. Con menos memoria no
+# arranca, o deja el Mac tirando de disco: ahí es mejor un modelo en la nube.
+RAM_BYTES="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+RAM_GB=$(( RAM_BYTES / 1073741824 ))
+MIN_GB_LOCAL=16
+
+USAR_OLLAMA=si
+if [ "$RAM_GB" -gt 0 ] && [ "$RAM_GB" -lt "$MIN_GB_LOCAL" ]; then
+  USAR_OLLAMA=no
+fi
+
+if [ "$USAR_OLLAMA" = "si" ]; then
+  if ! command -v ollama >/dev/null 2>&1; then
+    say "Instalando Ollama, que es el que elige los momentos."
+    command -v brew >/dev/null 2>&1 || { bad "Necesitas Homebrew para esto."; exit 1; }
+    brew install ollama
+  fi
+  ok "Ollama instalado"
+
+  if ! curl -fsS --max-time 3 http://localhost:11434/api/version >/dev/null 2>&1; then
+    say "Encendiendo Ollama."
+    brew services start ollama >/dev/null 2>&1 || true
+    for _ in $(seq 1 20); do
+      curl -fsS --max-time 3 http://localhost:11434/api/version >/dev/null 2>&1 && break
+      sleep 2
+    done
+  fi
+  if ! curl -fsS --max-time 3 http://localhost:11434/api/version >/dev/null 2>&1; then
+    bad "Ollama no responde en el puerto 11434. Prueba a mano: ollama serve"
     exit 1
   fi
-  brew install ollama
-fi
-ok "Ollama instalado"
+  ok "Ollama respondiendo"
 
-# El servicio tiene que quedarse encendido: el motor le pregunta por el puerto 11434.
-if ! curl -fsS --max-time 3 http://localhost:11434/api/version >/dev/null 2>&1; then
-  say "Encendiendo Ollama."
-  brew services start ollama >/dev/null 2>&1 || true
-  for _ in $(seq 1 20); do
-    if curl -fsS --max-time 3 http://localhost:11434/api/version >/dev/null 2>&1; then break; fi
-    sleep 2
-  done
+  if ! ollama list 2>/dev/null | grep -q "^${MODELO%%:*}"; then
+    say "Bajando el modelo ${MODELO}. Son unos cuantos gigas, una sola vez."
+    ollama pull "$MODELO"
+  fi
+  ok "Modelo ${MODELO} listo"
+else
+  say "Este Mac tiene ${RAM_GB} GB de memoria."
+  echo "Un modelo local necesita al menos ${MIN_GB_LOCAL} GB, así que los momentos los va"
+  echo "a elegir Gemini, que corre en la nube y no gasta memoria de aquí."
+  echo
+  echo "La clave sale gratis en https://aistudio.google.com/apikey (botón Create API key)."
+  echo "Pégala y dale enter. No se va a ver mientras escribes."
+  printf '> '
+  read -rs GEMINI
+  echo
+  GEMINI="$(printf '%s' "$GEMINI" | tr -d '[:space:]')"
+  if [ -z "$GEMINI" ]; then
+    bad "Sin clave no puede elegir momentos. Sácala y vuelve a correr el script."
+    exit 1
+  fi
 fi
-if ! curl -fsS --max-time 3 http://localhost:11434/api/version >/dev/null 2>&1; then
-  bad "Ollama no responde en el puerto 11434. Prueba a mano: ollama serve"
-  exit 1
-fi
-ok "Ollama respondiendo"
-
-if ! ollama list 2>/dev/null | grep -q "^${MODELO%%:*}"; then
-  say "Bajando el modelo ${MODELO}. Son unos cuantos gigas, una sola vez."
-  ollama pull "$MODELO"
-fi
-ok "Modelo ${MODELO} listo"
 
 # ------------------------------------------------------------------ .env
 
@@ -107,16 +131,25 @@ set_env() {
   fi
 }
 
-# Todo en local: Whisper transcribe, Ollama decide. Ninguna clave de pago.
+# Transcribir siempre en local: Whisper es pequeño y no gasta memoria de la buena.
 set_env TRANSCRIPTION_PROVIDER whisper
 set_env WHISPER_MODEL "${WHISPER_MODEL:-base}"
-set_env LLM "ollama:${MODELO}"
-# Desde el contenedor, el Mac anfitrión se llama host.docker.internal.
-set_env OLLAMA_BASE_URL "http://host.docker.internal:11434/v1"
+
+if [ "$USAR_OLLAMA" = "si" ]; then
+  set_env LLM "ollama:${MODELO}"
+  # Desde el contenedor, el Mac anfitrión se llama host.docker.internal.
+  set_env OLLAMA_BASE_URL "http://host.docker.internal:11434/v1"
+  RESUMEN="Whisper + ${MODELO}, todo en este Mac"
+else
+  set_env LLM "google-gla:gemini-3-flash-preview"
+  set_env GOOGLE_API_KEY "$GEMINI"
+  RESUMEN="Whisper aquí + Gemini eligiendo los momentos"
+fi
+
 # Los workflows abiertos: es tu propio servidor, no hay a quién limitarle nada.
 set_env WORKFLOWS_ACCESS all
 chmod 600 "$ENV_FILE"
-ok "Configurado sin claves de pago (Whisper + ${MODELO})"
+ok "Configurado: ${RESUMEN}"
 
 # ------------------------------------------------------------------ arrancar
 
