@@ -18,9 +18,28 @@ say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 bad() { printf '\033[31m%s\033[0m\n' "$1" >&2; }
 
 if ! command -v cloudflared >/dev/null 2>&1; then
-  say "Instalando cloudflared."
-  command -v brew >/dev/null 2>&1 || { bad "Necesitas Homebrew."; exit 1; }
-  brew install cloudflared
+  # Homebrew no tiene binario para todas las versiones de macOS y en esos casos
+  # se pone a compilar Go entero, media hora para nada. Cloudflare lo publica ya hecho.
+  say "Instalando cloudflared desde Cloudflare."
+  case "$(uname -m)" in
+    arm64) ARCO="arm64" ;;
+    *)     ARCO="amd64" ;;
+  esac
+  TMP="$(mktemp -d)"
+  if ! curl -fsSL -o "$TMP/cloudflared.tgz" \
+      "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${ARCO}.tgz"; then
+    bad "No se pudo descargar cloudflared. ¿Tienes internet?"
+    rm -rf "$TMP"; exit 1
+  fi
+  tar -xzf "$TMP/cloudflared.tgz" -C "$TMP"
+  DESTINO=/usr/local/bin
+  [ -d "$DESTINO" ] || sudo mkdir -p "$DESTINO"
+  sudo mv "$TMP/cloudflared" "$DESTINO/cloudflared"
+  sudo chmod +x "$DESTINO/cloudflared"
+  # Gatekeeper marca lo descargado y se niega a ejecutarlo si no se le quita.
+  sudo xattr -d com.apple.quarantine "$DESTINO/cloudflared" 2>/dev/null || true
+  rm -rf "$TMP"
+  command -v cloudflared >/dev/null 2>&1 || { bad "Quedó instalado en ${DESTINO} pero no está en el PATH."; exit 1; }
 fi
 
 if ! curl -fsS --max-time 5 "http://localhost:${PUERTO}/docs" >/dev/null 2>&1; then
