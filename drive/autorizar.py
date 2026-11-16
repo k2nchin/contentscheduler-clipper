@@ -26,8 +26,22 @@ from pathlib import Path
 AQUI = Path(__file__).resolve().parent
 CLIENTE = AQUI / "credenciales" / "cliente-oauth.json"
 SALIDA = AQUI / "credenciales" / "usuario.json"
-ALCANCE = "https://www.googleapis.com/auth/drive.file"
+# El estrecho: la app solo ve lo que ella misma crea. Es el que queremos.
+SOLO_LO_SUYO = "https://www.googleapis.com/auth/drive.file"
+# El amplio: hace falta para escribir en una carpeta que creaste tú a mano.
+TODO_EL_DRIVE = "https://www.googleapis.com/auth/drive"
 PUERTO = 8765
+
+
+def alcance() -> tuple[str, bool]:
+    """El permiso a pedir. Si apuntas a una carpeta tuya, hace falta el amplio."""
+    env = AQUI.parent / ".env"
+    carpeta = ""
+    if env.is_file():
+        for linea in env.read_text().splitlines():
+            if linea.startswith("GOOGLE_DRIVE_FOLDER_ID="):
+                carpeta = linea.split("=", 1)[1].strip()
+    return (TODO_EL_DRIVE, True) if carpeta else (SOLO_LO_SUYO, False)
 
 
 class Recogida(http.server.BaseHTTPRequestHandler):
@@ -78,13 +92,21 @@ def main() -> int:
         print("Ese json no parece de un cliente de escritorio. Vuelve a bajarlo.")
         return 1
 
+    permiso, amplio = alcance()
+    if amplio:
+        print("Vas a dar acceso a tu Drive entero, porque le indicaste una carpeta")
+        print("que creaste tú a mano. Si prefieres el permiso mínimo, deja vacío")
+        print("GOOGLE_DRIVE_FOLDER_ID en el .env y la app se hará su carpeta.\n")
+    else:
+        print("Permiso mínimo: la app solo verá los archivos que ella cree.\n")
+
     destino = f"http://localhost:{PUERTO}"
     Recogida.estado = secrets.token_urlsafe(16)
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
         "client_id": cliente,
         "redirect_uri": destino,
         "response_type": "code",
-        "scope": ALCANCE,
+        "scope": permiso,
         "access_type": "offline",
         "prompt": "consent",          # obliga a devolver el permiso duradero
         "state": Recogida.estado,
@@ -129,8 +151,8 @@ def main() -> int:
         print(f"Google no aceptó el intercambio: {e}")
         return 1
 
-    permiso = respuesta.get("refresh_token")
-    if not permiso:
+    duradero = respuesta.get("refresh_token")
+    if not duradero:
         print("Google no devolvió el permiso duradero.")
         print("Quita el acceso en myaccount.google.com/permissions y repite.")
         return 1
@@ -138,7 +160,8 @@ def main() -> int:
     SALIDA.write_text(json.dumps({
         "client_id": cliente,
         "client_secret": secreto,
-        "refresh_token": permiso,
+        "refresh_token": duradero,
+        "scope": permiso,
     }, indent=2))
     SALIDA.chmod(0o600)
 

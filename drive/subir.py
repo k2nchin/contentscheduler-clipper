@@ -66,14 +66,17 @@ def credenciales():
     if Path(USUARIO_JSON).is_file():
         try:
             datos = json.loads(Path(USUARIO_JSON).read_text())
-            log.info("Subiendo con tu cuenta de Google.")
+            concedido = datos.get("scope") or ALCANCE[0]
+            amplio = concedido.rstrip("/").endswith("/drive")
+            log.info("Subiendo con tu cuenta de Google (permiso %s).",
+                     "sobre todo tu Drive" if amplio else "solo sobre lo suyo")
             return Credentials(
                 None,
                 refresh_token=datos["refresh_token"],
                 client_id=datos["client_id"],
                 client_secret=datos["client_secret"],
                 token_uri="https://oauth2.googleapis.com/token",
-                scopes=ALCANCE,
+                scopes=[concedido],
             )
         except Exception as e:
             log.error("El permiso de tu cuenta no sirve (%s). Vuelve a autorizar:", e)
@@ -217,9 +220,10 @@ def subir(creds, clip: Path, destino: str | None = None) -> str | None:
                     log.error("Esa carpeta no existe para la cuenta de servicio.")
                     log.error("Revisa que GOOGLE_DRIVE_FOLDER_ID sea solo el id de la carpeta.")
                 elif "ParentPermissions" in razon:
-                    log.error("Esa carpeta no la creó esta app, y el permiso que diste solo")
-                    log.error("alcanza a lo que ella misma crea. Quita GOOGLE_DRIVE_FOLDER_ID")
-                    log.error("del .env y se hará su propia carpeta «%s» en tu Drive.", NOMBRE_RAIZ)
+                    log.error("Esa carpeta no la creó esta app y el permiso que diste no llega.")
+                    log.error("Vuelve a autorizar, que ahora pedirá el permiso que hace falta:")
+                    log.error("   python3 drive/autorizar.py")
+                    log.error("O deja vacío GOOGLE_DRIVE_FOLDER_ID y usará su propia carpeta.")
                 else:
                     log.error("Revisa que esa carpeta sea de la cuenta que autorizaste.")
                 log.error("Reviso otra vez en %d minutos.", ESPERA_TRAS_FALLO_DE_CONFIGURACION // 60)
