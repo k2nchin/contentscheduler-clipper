@@ -636,6 +636,23 @@ services:
       - DRIVE_INTERVALO=${DRIVE_INTERVALO:-15}
     restart: unless-stopped
 
+  # Graba un directo y va clipeando por trozos mientras sigue en vivo.
+  # No corre solo: se lanza cuando quieras, con el enlace del directo.
+  #   docker compose run --rm directo <enlace>
+  directo:
+    build: ./directo
+    profiles: ["manual"]
+    volumes:
+      - uploads:/app/uploads
+    environment:
+      - CLIP_API_URL=http://backend:8000
+      - CLIP_API_KEY=${CLIP_API_KEY:-}
+      - MINUTOS_POR_TROZO=${MINUTOS_POR_TROZO:-10}
+      - ALTURA_MAXIMA=${ALTURA_MAXIMA:-720}
+      - OPCIONES_JSON=${OPCIONES_JSON:-}
+    depends_on:
+      - backend
+
   # Redis for caching and job queues (useful for video processing)
   redis:
     image: redis:7-alpine
