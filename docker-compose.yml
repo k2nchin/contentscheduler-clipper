@@ -128,7 +128,9 @@ services:
     platform: "${BACKEND_PLATFORM:-linux/amd64}"
     command: [".venv/bin/uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "127.0.0.1:8000:8000"
+      # 127.0.0.1 = solo este ordenador. Pon BACKEND_BIND=0.0.0.0 en el .env
+      # para que el iPhone llegue por la wifi; la clave de API sigue haciendo falta.
+      - "${BACKEND_BIND:-127.0.0.1}:8000:8000"
     volumes:
       - ./backend/src:/app/src
       - uploads:/app/uploads

@@ -147,6 +147,9 @@ else
 fi
 
 # Los workflows abiertos: es tu propio servidor, no hay a quién limitarle nada.
+# El iPhone tiene que alcanzar el motor por la wifi; sin esto solo escucha
+# dentro del Mac. Sigue pidiendo la clave de API a cualquiera que llame.
+set_env BACKEND_BIND 0.0.0.0
 set_env WORKFLOWS_ACCESS all
 chmod 600 "$ENV_FILE"
 ok "Configurado: ${RESUMEN}"
