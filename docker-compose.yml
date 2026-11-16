@@ -618,6 +618,24 @@ services:
       - ./escritorio:/usr/share/nginx/html:ro
     restart: unless-stopped
 
+  # Sube a Google Drive cada clip que sale del motor, sin que el iPhone tenga
+  # que estar encendido. Se enciende con COMPOSE_PROFILES=drive y las
+  # credenciales puestas. Pasos en docs/clips-a-drive.md.
+  drive:
+    build: ./drive
+    container_name: supoclip-drive
+    profiles: ["drive"]
+    volumes:
+      - uploads:/app/uploads
+      - ./drive/credenciales:/credenciales:ro
+    environment:
+      - GOOGLE_DRIVE_SA_JSON=/credenciales/cuenta-de-servicio.json
+      - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID:-}
+      - CLIPS_DIR=/app/uploads/clips
+      - DRIVE_BORRAR_LOCAL=${DRIVE_BORRAR_LOCAL:-false}
+      - DRIVE_INTERVALO=${DRIVE_INTERVALO:-15}
+    restart: unless-stopped
+
   # Redis for caching and job queues (useful for video processing)
   redis:
     image: redis:7-alpine
