@@ -129,7 +129,7 @@
     <div class="modes" id="modos"></div>
     <div id="extraTema" class="field hide" style="margin-top:12px">
       <label class="f">¿De qué tiene que hablar?</label>
-      <input id="tema" placeholder="Ej: los chistes, la pelea, el consejo de dinero">
+      <input id="tema" maxlength="120" placeholder="Ej: los chistes, la pelea, el consejo de dinero">
     </div>
     <div id="extraPartes" class="field hide" style="margin-top:12px">
       <label class="f">Partes de la serie</label>
@@ -141,7 +141,13 @@
     <h2>Cómo los quieres</h2>
     <div class="cols">
       <div><label class="f">Formato</label>
-        <select id="formato"><option value="vertical">Vertical 9:16</option><option value="square">Cuadrado</option><option value="horizontal">Horizontal</option></select></div>
+        <select id="formato">
+          <option value="vertical">Auto 9:16 — busca a quien habla</option>
+          <option value="vertical_fit">Imagen completa 9:16 — con barras</option>
+          <option value="vertical_pan">Paneo — sigue al hablante</option>
+          <option value="vertical_split">Pantalla partida — dos personas</option>
+          <option value="original">Original — sin recortar</option>
+        </select></div>
       <div><label class="f">Calidad</label>
         <select id="calidad"><option value="fast">Rápido</option><option value="balanced" selected>Normal</option><option value="quality">Máxima</option></select></div>
       <div><label class="f">Duración</label>
@@ -157,7 +163,7 @@
     </div>
     <div class="field" style="margin-top:12px">
       <label class="f">Qué buscar (opcional)</label>
-      <textarea id="instrucciones" placeholder="Ej: solo los momentos de risa y las peleas"></textarea>
+      <textarea id="instrucciones" maxlength="500" placeholder="Ej: solo los momentos de risa y las peleas"></textarea>
     </div>
   </div>
 </section>
@@ -243,7 +249,7 @@
     <textarea id="subTexto"></textarea>
   </div>
   <div class="row">
-    <select id="subPos" style="width:auto"><option value="bottom">Abajo</option><option value="center">Centro</option><option value="top">Arriba</option></select>
+    <select id="subPos" style="width:auto"><option value="bottom">Abajo</option><option value="middle">Centro</option><option value="top">Arriba</option></select>
     <button class="sm" onclick="guardarSubs()">Guardar subtítulos</button>
   </div>
 
