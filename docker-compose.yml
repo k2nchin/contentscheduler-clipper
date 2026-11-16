@@ -630,6 +630,7 @@ services:
       - ./drive/credenciales:/credenciales:ro
     environment:
       - GOOGLE_DRIVE_SA_JSON=/credenciales/cuenta-de-servicio.json
+      - GOOGLE_DRIVE_USER_JSON=/credenciales/usuario.json
       # Para poder nombrar cada carpeta con el video del que salieron los clips.
       - DRIVE_DATABASE_URL=postgresql://supoclip:supoclip_password@postgres:5432/supoclip
       - DRIVE_ORGANIZAR=${DRIVE_ORGANIZAR:-true}

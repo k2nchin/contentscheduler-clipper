@@ -28,6 +28,7 @@ import google.auth.transport.requests
 import psycopg
 import requests
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +38,8 @@ logging.basicConfig(
 log = logging.getLogger("drive")
 
 SA_JSON = os.getenv("GOOGLE_DRIVE_SA_JSON", "/credenciales/cuenta-de-servicio.json")
+# Permiso duradero sobre TU cuenta, de drive/autorizar.py. Si existe, manda.
+USUARIO_JSON = os.getenv("GOOGLE_DRIVE_USER_JSON", "/credenciales/usuario.json")
 CARPETA = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
 CLIPS = Path(os.getenv("CLIPS_DIR", "/app/uploads/clips"))
 BORRAR = os.getenv("DRIVE_BORRAR_LOCAL", "false").lower() == "true"
@@ -56,13 +59,34 @@ _carpetas: dict[str, str] = {}
 
 
 def credenciales():
+    """Tu cuenta si la autorizaste; si no, la cuenta de servicio."""
     if not CARPETA:
         log.error("Falta GOOGLE_DRIVE_FOLDER_ID. Mira docs/clips-a-drive.md")
         return None
+
+    if Path(USUARIO_JSON).is_file():
+        try:
+            datos = json.loads(Path(USUARIO_JSON).read_text())
+            log.info("Subiendo con tu cuenta de Google.")
+            return Credentials(
+                None,
+                refresh_token=datos["refresh_token"],
+                client_id=datos["client_id"],
+                client_secret=datos["client_secret"],
+                token_uri="https://oauth2.googleapis.com/token",
+                scopes=ALCANCE,
+            )
+        except Exception as e:
+            log.error("El permiso de tu cuenta no sirve (%s). Vuelve a autorizar:", e)
+            log.error("   python3 drive/autorizar.py")
+            return None
+
     if not Path(SA_JSON).is_file():
-        log.error("No encuentro el json de la cuenta de servicio en %s", SA_JSON)
+        log.error("No hay credenciales. Autoriza tu cuenta:  python3 drive/autorizar.py")
         return None
     try:
+        log.warning("Usando una cuenta de servicio, que NO tiene espacio propio en Drive.")
+        log.warning("Si falla al subir, autoriza tu cuenta: python3 drive/autorizar.py")
         return service_account.Credentials.from_service_account_file(SA_JSON, scopes=ALCANCE)
     except Exception as e:
         log.error("El json de la cuenta de servicio no sirve: %s", e)
@@ -187,8 +211,9 @@ def subir(creds, clip: Path, destino: str | None = None) -> str | None:
                 if "storageQuota" in razon or "quota" in razon.lower():
                     # Lo más habitual: una cuenta de servicio no tiene disco propio.
                     log.error("Una cuenta de servicio no tiene espacio propio en Drive, así que")
-                    log.error("puede crear carpetas pero no guardar archivos. Hace falta una")
-                    log.error("unidad compartida. Está explicado en docs/clips-a-drive.md")
+                    log.error("puede crear carpetas pero no guardar archivos. La salida es")
+                    log.error("autorizar tu propia cuenta, una sola vez:")
+                    log.error("   cd clipper-web && python3 drive/autorizar.py")
                 elif r.status_code == 404:
                     log.error("Esa carpeta no existe para la cuenta de servicio.")
                     log.error("Revisa que GOOGLE_DRIVE_FOLDER_ID sea solo el id de la carpeta.")
