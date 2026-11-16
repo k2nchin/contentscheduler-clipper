@@ -76,6 +76,13 @@ def estable(clip: Path) -> bool:
     return antes.st_size > 0
 
 
+# Cuando el destino está mal, reintentar cada pocos segundos solo gasta datos:
+# se para un rato y se avisa una vez, no en cada vuelta.
+ESPERA_TRAS_FALLO_DE_CONFIGURACION = 300
+_pausa_hasta = 0.0
+_ya_avisado = False
+
+
 def subir(creds, clip: Path) -> str | None:
     """Sube el archivo entero de una vez y devuelve su identificador en Drive."""
     creds.refresh(google.auth.transport.requests.Request())
@@ -92,21 +99,39 @@ def subir(creds, clip: Path) -> str | None:
             timeout=1800,
         )
     if r.status_code >= 300:
+        global _pausa_hasta, _ya_avisado
         # El fallo más común con diferencia: la carpeta no está compartida.
         if r.status_code in (403, 404):
-            log.error(
-                "Drive dice %s. Comparte la carpeta con el correo de la cuenta de "
-                "servicio, como Editor, y comprueba el id de la carpeta.",
-                r.status_code,
-            )
+            if not _ya_avisado:
+                log.error(
+                    "Drive dice %s, así que el destino está mal. Dos cosas que mirar:",
+                    r.status_code,
+                )
+                log.error("  1. Que GOOGLE_DRIVE_FOLDER_ID sea solo el id, no la dirección entera.")
+                log.error("  2. Que esa carpeta esté compartida como Editor con:")
+                log.error("     %s", correo_de_la_cuenta())
+                log.error("Reviso otra vez en %d minutos.", ESPERA_TRAS_FALLO_DE_CONFIGURACION // 60)
+                _ya_avisado = True
+            _pausa_hasta = time.time() + ESPERA_TRAS_FALLO_DE_CONFIGURACION
         else:
             log.error("Drive respondió %s: %s", r.status_code, r.text[:200])
         return None
+    _ya_avisado = False
     return (r.json() or {}).get("id")
+
+
+def correo_de_la_cuenta() -> str:
+    """El correo que hay que invitar a la carpeta, sacado del propio json."""
+    try:
+        return json.loads(Path(SA_JSON).read_text()).get("client_email", "(no se pudo leer)")
+    except Exception:
+        return "(no se pudo leer el json)"
 
 
 def vuelta(creds) -> None:
     if not CLIPS.is_dir():
+        return
+    if time.time() < _pausa_hasta:
         return
     for clip in sorted(CLIPS.rglob("*")):
         if not clip.is_file() or clip.suffix.lower() not in EXTENSIONES:
