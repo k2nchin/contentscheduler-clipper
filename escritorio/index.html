@@ -438,6 +438,22 @@ function volver() { S.tarea = ''; S.clips = []; S.marcados.clear(); ver('crear')
 // ───────────────────────── Los clips ─────────────────────────
 function color(v) { return v >= 75 ? 'var(--ok)' : v >= 50 ? 'var(--warn)' : 'var(--muted)'; }
 
+// Los tiempos del motor llegan como «MM:SS» o «HH:MM:SS», no como número.
+function segundos(v) {
+  if (typeof v === 'number') return v;
+  if (typeof v !== 'string') return 0;
+  const n = Number(v);
+  if (Number.isFinite(n)) return n;
+  const partes = v.split(':').map(Number);
+  return partes.every(Number.isFinite) ? partes.reduce((a, b) => a * 60 + b, 0) : 0;
+}
+
+function minuto(v) {
+  const s = segundos(v);
+  const m = Math.floor(s / 60);
+  return m > 0 ? `min ${m}` : `desde el principio`;
+}
+
 async function mostrar(clips) {
   // Una serie va en orden de capítulos; lo demás, por nota.
   const esSerie = clips.some(c => c.part_number);
@@ -458,7 +474,7 @@ async function mostrar(clips) {
       <div class="body">
         <span class="score" style="color:${color(v)}">${v}</span>
         <b>${(c.hook_title || 'Clip').replace(/</g, '&lt;')}</b>
-        <div class="meta">${parte}${Math.round(c.duration || 0)} s · min ${Math.floor((c.start_time || 0) / 60)}</div>
+        <div class="meta">${parte}${Math.round(segundos(c.duration))} s · ${minuto(c.start_time)}</div>
         <div class="sbar"><span class="n">Gancho</span><span class="t"><i style="width:${(c.hook_score||0)*4}%"></i></span></div>
         <div class="sbar"><span class="n">Enganche</span><span class="t"><i style="width:${(c.engagement_score||0)*4}%"></i></span></div>
         <div class="sbar"><span class="n">Valor</span><span class="t"><i style="width:${(c.value_score||0)*4}%"></i></span></div>
@@ -553,6 +569,13 @@ function bajar(preset) {
 // ───────────────────────── Trabajos anteriores ─────────────────────────
 const COLORES = { completed: 'var(--ok)', error: 'var(--red)', cancelled: 'var(--muted)' };
 
+/// De qué video salió, para reconocerlo sin leer un código.
+function nombreTrabajo(x) {
+  const bruto = x.source_title || x.source_url || x.url || '';
+  if (!bruto) return 'Video';
+  return String(bruto).replace(/^https?:\/\//, '').slice(0, 70).replace(/</g, '&lt;');
+}
+
 async function cargarTrabajos() {
   let t = [];
   try { t = (await api('/tasks/')).tasks || []; } catch { return; }
@@ -562,7 +585,8 @@ async function cargarTrabajos() {
     const cuando = x.created_at ? new Date(x.created_at).toLocaleString('es') : '';
     return `<div class="job" onclick="abrirTrabajo('${x.id}')">
       <span class="dot" style="background:${c}"></span>
-      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${(x.url || x.id).replace(/</g, '&lt;')}</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${nombreTrabajo(x)}</span>
+      <span class="hint" style="margin:0">${x.clips_count ? x.clips_count + ' clips' : ''}</span>
       <span class="hint" style="margin:0">${cuando}</span></div>`;
   }).join('');
 }
