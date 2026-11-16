@@ -558,9 +558,69 @@ class AIEditError(Exception):
     """A failure the creator should see as-is."""
 
 
+def _ai_edit_model_name() -> str:
+    """Which model plans the edit.
+
+    ``AI_EDIT_MODEL`` wins. With no Anthropic key, fall back to the same ``LLM``
+    the rest of the pipeline already uses, so a self-hoster who configured
+    Gemini, OpenAI or a local model gets AI editing without a second key.
+    """
+    explicit = os.getenv("AI_EDIT_MODEL", "").strip()
+    if explicit:
+        return explicit
+    config = get_config()
+    if config.anthropic_api_key:
+        return AI_EDIT_MODEL
+    return (config.llm or "").strip() or AI_EDIT_MODEL
+
+
 def ai_editing_configured() -> bool:
-    model = os.getenv("AI_EDIT_MODEL", AI_EDIT_MODEL).strip() or AI_EDIT_MODEL
-    return bool(model.removeprefix("ollama:")) if model.startswith("ollama:") else bool(get_config().anthropic_api_key)
+    model = _ai_edit_model_name()
+    if model.startswith("ollama:"):
+        return bool(model.removeprefix("ollama:"))
+    if ":" in model:
+        from ..ai import _get_missing_llm_key_error
+
+        return _get_missing_llm_key_error(model, get_config()) is None
+    return bool(get_config().anthropic_api_key)
+
+
+async def _plan_edit_provider(context: str, model_name: str) -> EditPlan:
+    """Plan with whatever provider ``LLM`` names (Gemini, OpenAI, OpenRouter…).
+
+    The typed operations and the validation afterwards are the same ones the
+    Anthropic path uses; only who writes the plan changes.
+    """
+    from pydantic_ai import Agent
+
+    from ..ai import _build_transcript_model, _get_missing_llm_key_error
+    from ..runtime_settings import apply_settings_to_process_env
+
+    config = get_config()
+    # Algunos proveedores leen su clave del entorno, no del objeto de configuración.
+    apply_settings_to_process_env(config.as_runtime_settings())
+    problem = _get_missing_llm_key_error(model_name, config)
+    if problem:
+        raise AIEditError(problem)
+
+    system = SYSTEM_PROMPT + "\n\nJSON output schema:\n" + json.dumps(
+        EditPlan.model_json_schema(), separators=(",", ":")
+    )
+    agent = Agent[None, EditPlan](
+        model=_build_transcript_model(config, model_name),
+        output_type=EditPlan,
+        system_prompt=system,
+        output_retries=2,
+    )
+    try:
+        result = await asyncio.wait_for(agent.run(context), timeout=AI_EDIT_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        raise AIEditError("The AI took too long. Try a smaller change.") from None
+    except Exception as exc:  # the model or its provider failed
+        logger.warning("AI edit planning failed on %s: %s", model_name, exc)
+        raise AIEditError("The AI couldn't plan that edit. Try again or reword it.") from None
+    logger.info("AI edit planned %d operations with %s", len(result.output.operations), model_name)
+    return result.output
 
 
 async def _plan_edit_ollama(context: str, model: str) -> EditPlan:
@@ -607,12 +667,14 @@ async def _plan_edit_ollama(context: str, model: str) -> EditPlan:
 
 
 async def plan_edit(context: str) -> EditPlan:
-    """Use Sonnet by default, or an explicitly configured local Ollama model."""
-    model = os.getenv("AI_EDIT_MODEL", AI_EDIT_MODEL).strip() or AI_EDIT_MODEL
+    """Sonnet by default; a local Ollama model or any configured provider otherwise."""
+    model = _ai_edit_model_name()
     if model.startswith("ollama:"):
         if not model.removeprefix("ollama:"):
             raise AIEditError("Set an Ollama model in AI_EDIT_MODEL.")
         return await _plan_edit_ollama(context, model.removeprefix("ollama:"))
+    if ":" in model:
+        return await _plan_edit_provider(context, model)
     import anthropic
 
     config = get_config()
