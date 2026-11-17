@@ -9,7 +9,7 @@ El botón «✂️ Abrir Clipper» de contentscheduler.vercel.app apunta a
 - **Redis**: Upstash (gratis) o el Redis de Railway.
 
 ## 2. Backend (Python + procesamiento de video) — Railway o Render
-1. Nuevo proyecto → desde GitHub → `k2nchin/Content-Scheduler`, **Root Directory** `clipper-web/backend`
+1. Nuevo proyecto → desde GitHub → `k2nchin/contentscheduler-clipper`, **Root Directory** `backend`
    (usa su Dockerfile).
 2. Crea dos servicios con la misma imagen: la **API** y el **worker** (en Render ya hay ejemplo en
    `deploy/render-worker/`).
@@ -18,8 +18,8 @@ El botón «✂️ Abrir Clipper» de contentscheduler.vercel.app apunta a
 4. Anota la URL pública de la API.
 
 ## 3. Frontend — Vercel
-1. Vercel → **Add New → Project** → `k2nchin/Content-Scheduler`.
-2. **Project Name** `contentscheduler-clipper`, **Root Directory** `clipper-web/frontend`.
+1. Vercel → **Add New → Project** → `k2nchin/contentscheduler-clipper`.
+2. **Project Name** `contentscheduler-clipper`, **Root Directory** `frontend`.
 3. Variables: `DATABASE_URL`, la URL del backend, `BETTER_AUTH_SECRET`/auth y las `NEXT_PUBLIC_*`
    que uses (ver `.env.example`).
 4. Deploy. Tu sitio actual no se toca: es otro proyecto.
@@ -27,4 +27,4 @@ El botón «✂️ Abrir Clipper» de contentscheduler.vercel.app apunta a
 ## Obligación de la AGPL (no la quites)
 - Mantén `clipper-web/LICENSE`.
 - El pie de la web enlaza al código fuente (`frontend/src/lib/site.ts → GITHUB_URL`).
-  El repo, o al menos esta carpeta, debe estar público y actualizado con lo que corre en producción.
+  El repo público https://github.com/k2nchin/contentscheduler-clipper debe estar y actualizado con lo que corre en producción.
