@@ -8,8 +8,14 @@
 import AppKit
 import WebKit
 
-/// Dónde vive la página de herramientas. Se puede cambiar con CS_URL.
-let direccion = ProcessInfo.processInfo.environment["CS_URL"] ?? "http://localhost:3200"
+/// Dónde vive la página de herramientas. Se cambia desde el menú y se recuerda.
+var direccion: String {
+    get {
+        if let v = ProcessInfo.processInfo.environment["CS_URL"], !v.isEmpty { return v }
+        return UserDefaults.standard.string(forKey: "direccion") ?? "http://localhost:3200"
+    }
+    set { UserDefaults.standard.set(newValue, forKey: "direccion") }
+}
 
 final class Ventana: NSWindowController {
     let web: WKWebView
@@ -33,6 +39,9 @@ final class Ventana: NSWindowController {
 
         super.init(window: ventana)
         web.navigationDelegate = self
+        // Sin esto, en una app de Mac no salen ni el selector de archivos ni las
+        // ventanas de confirmación, y los botones que dependen de ellos no hacen nada.
+        web.uiDelegate = self
         cargar()
     }
 
@@ -70,6 +79,91 @@ final class Ventana: NSWindowController {
 extension Ventana: WKNavigationDelegate {
     func webView(_ v: WKWebView, didFail _: WKNavigation!, withError _: Error) { sinMotor() }
     func webView(_ v: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError _: Error) { sinMotor() }
+
+    /// Bajar un clip: se le pregunta dónde guardarlo, como cualquier app de Mac.
+    func webView(_ v: WKWebView, navigationAction: WKNavigationAction,
+                 didBecome download: WKDownload) { download.delegate = self }
+
+    func webView(_ v: WKWebView, navigationResponse: WKNavigationResponse,
+                 didBecome download: WKDownload) { download.delegate = self }
+
+    func webView(_ v: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // Un enlace a otro sitio se abre en el navegador, no dentro de la app.
+        if action.navigationType == .linkActivated, let u = action.request.url,
+           u.host != URL(string: direccion)?.host {
+            NSWorkspace.shared.open(u)
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+}
+
+extension Ventana: WKDownloadDelegate {
+    func download(_ download: WKDownload, decideDestinationUsing _: URLResponse,
+                  suggestedFilename: String,
+                  completionHandler: @escaping (URL?) -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedFilename
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.canCreateDirectories = true
+        panel.begin { respuesta in
+            guard respuesta == .OK, let destino = panel.url else { completionHandler(nil); return }
+            try? FileManager.default.removeItem(at: destino)
+            completionHandler(destino)
+        }
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData _: Data?) {
+        let a = NSAlert()
+        a.messageText = "No se pudo guardar el archivo"
+        a.informativeText = error.localizedDescription
+        a.runModal()
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        guard let u = download.progress.fileURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([u])
+    }
+}
+
+extension Ventana: WKUIDelegate {
+    /// El selector de archivos, para poder elegir un video del disco.
+    func webView(_ v: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame _: WKFrameInfo,
+                 completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.begin { completionHandler($0 == .OK ? panel.urls : nil) }
+    }
+
+    func webView(_ v: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame _: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        let a = NSAlert()
+        a.messageText = message
+        a.runModal()
+        completionHandler()
+    }
+
+    /// Sin esto, un «¿seguro?» se respondía que no sin preguntar nada.
+    func webView(_ v: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame _: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        let a = NSAlert()
+        a.messageText = message
+        a.addButton(withTitle: "Sí")
+        a.addButton(withTitle: "Cancelar")
+        completionHandler(a.runModal() == .alertFirstButtonReturn)
+    }
+
+    func webView(_ v: WKWebView, createWebViewWith _: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures _: WKWindowFeatures) -> WKWebView? {
+        // Lo que se abriría en pestaña nueva, al navegador.
+        if let u = action.request.url { NSWorkspace.shared.open(u) }
+        return nil
+    }
 }
 
 final class Delegado: NSObject, NSApplicationDelegate {
@@ -93,6 +187,11 @@ final class Delegado: NSObject, NSApplicationDelegate {
         mApp.addItem(withTitle: "Acerca de Content Scheduler", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         mApp.addItem(.separator())
         mApp.addItem(withTitle: "Recargar", action: #selector(recargar), keyEquivalent: "r")
+        mApp.addItem(withTitle: "Dónde está el motor…", action: #selector(cambiarDireccion), keyEquivalent: ",")
+        mApp.addItem(.separator())
+        mApp.addItem(withTitle: "Agrandar", action: #selector(agrandar), keyEquivalent: "+")
+        mApp.addItem(withTitle: "Achicar", action: #selector(achicar), keyEquivalent: "-")
+        mApp.addItem(withTitle: "Tamaño normal", action: #selector(tamanoNormal), keyEquivalent: "0")
         mApp.addItem(.separator())
         mApp.addItem(withTitle: "Ocultar", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         mApp.addItem(withTitle: "Salir", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -115,6 +214,32 @@ final class Delegado: NSObject, NSApplicationDelegate {
     }
 
     @objc private func recargar() { ventana?.cargar() }
+
+    /// Por si el motor no está en el puerto de siempre.
+    @objc private func cambiarDireccion() {
+        let a = NSAlert()
+        a.messageText = "¿Dónde está tu motor de clipping?"
+        a.informativeText = "Normalmente corre en este mismo Mac y no hay que tocar nada."
+        let campo = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        campo.stringValue = direccion
+        a.accessoryView = campo
+        a.addButton(withTitle: "Guardar")
+        a.addButton(withTitle: "Cancelar")
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        let nueva = campo.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !nueva.isEmpty, URL(string: nueva)?.scheme != nil else { return }
+        direccion = nueva
+        ventana?.cargar()
+    }
+
+    @objc private func agrandar() { zoom(+0.1) }
+    @objc private func achicar() { zoom(-0.1) }
+    @objc private func tamanoNormal() { ventana?.web.pageZoom = 1 }
+
+    private func zoom(_ paso: CGFloat) {
+        guard let w = ventana?.web else { return }
+        w.pageZoom = min(2.5, max(0.5, w.pageZoom + paso))
+    }
 }
 
 let app = NSApplication.shared
