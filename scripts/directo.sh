@@ -14,14 +14,39 @@ ENV_FILE=".env"
 say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 bad() { printf '\033[31m%s\033[0m\n' "$1" >&2; }
 
-ENLACE="${1:-}"
+FONDO=no
+ENLACE=""
+for arg in "$@"; do
+  case "$arg" in
+    --fondo|-f) FONDO=si ;;
+    --parar|--stop) PARAR=si ;;
+    *) ENLACE="$arg" ;;
+  esac
+done
+
+if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
+
+# Parar una grabación que quedó en marcha
+if [ "${PARAR:-no}" = "si" ]; then
+  EN_MARCHA="$(docker ps --filter "name=supoclip-directo" --format '{{.Names}}' | head -1)"
+  if [ -z "$EN_MARCHA" ]; then
+    echo "No hay ninguna grabación en marcha."
+  else
+    docker stop "$EN_MARCHA" >/dev/null
+    echo "Grabación parada. El último trozo se manda a clipear solo."
+  fi
+  exit 0
+fi
+
 if [ -z "$ENLACE" ]; then
   bad "Dime qué directo grabar:"
   echo "   ./scripts/directo.sh https://www.youtube.com/watch?v=..."
+  echo
+  echo "Opciones:"
+  echo "   --fondo    graba sin ocupar la terminal; puedes cerrarla"
+  echo "   --parar    para la grabación que esté en marcha"
   exit 1
 fi
-
-if docker compose version >/dev/null 2>&1; then DC="docker compose"; else DC="docker-compose"; fi
 
 if ! curl -fsS --max-time 5 http://localhost:8000/docs >/dev/null 2>&1; then
   bad "El motor no está encendido. Levántalo: $DC up -d"
@@ -47,9 +72,20 @@ MIN="${MINUTOS_POR_TROZO:-10}"
 say "Grabando el directo. Trozos de ${MIN} minutos."
 echo "Cada trozo se manda a clipear al cerrarse, así que los primeros clips"
 echo "aparecen unos ${MIN} minutos después de empezar."
-echo
-echo "Míralos en http://localhost:3200 o en el iPhone, según vayan saliendo."
-echo "Ctrl+C para parar."
+echo "Van saliendo en http://localhost:3200 y en el iPhone."
 echo
 
-CLIP_API_KEY="$CLAVE" $DC run --rm directo "$ENLACE"
+if [ "$FONDO" = "si" ]; then
+  # Detached y con nombre fijo, para poder mirarlo y pararlo después.
+  docker rm -f supoclip-directo >/dev/null 2>&1 || true
+  CLIP_API_KEY="$CLAVE" $DC run -d --name supoclip-directo directo "$ENLACE" >/dev/null
+  say "Grabando en segundo plano. Ya puedes cerrar la terminal."
+  echo "   Ver cómo va:  docker logs -f supoclip-directo"
+  echo "   Parar:        ./scripts/directo.sh --parar"
+  echo
+  echo "Si el Mac no se duerme, sigue grabando aunque te vayas."
+else
+  echo "Ctrl+C para parar. Si vas a irte, usa --fondo."
+  echo
+  CLIP_API_KEY="$CLAVE" $DC run --rm directo "$ENLACE"
+fi
