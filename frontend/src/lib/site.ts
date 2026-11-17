@@ -5,7 +5,7 @@ export const COMPANY_REGISTRATION_NUMBER = "";
 export const COMPANY_REGISTERED_ADDRESS = "";
 export const DEFAULT_SITE_URL = "https://contentscheduler.vercel.app";
 export const HOSTED_APP_URL = DEFAULT_SITE_URL;
-export const GITHUB_URL = "https://github.com/k2nchin/Content-Scheduler";
+export const GITHUB_URL = "https://github.com/k2nchin/Content-Scheduler/tree/main/clipper-web";
 /** The hosted MCP server's Streamable HTTP endpoint (legacy SSE clients use `/sse`). */
 export const HOSTED_MCP_URL = "";
 
