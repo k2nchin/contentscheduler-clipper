@@ -27,10 +27,11 @@ final class Ventana: NSWindowController {
 
         let ventana = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 860),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            // Sin fullSizeContentView: con él, la página se mete debajo de la
+            // barra de título y tapa los botones de cerrar y minimizar.
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         ventana.title = "Content Scheduler"
-        ventana.titlebarAppearsTransparent = true
         ventana.backgroundColor = NSColor(red: 7/255, green: 7/255, blue: 8/255, alpha: 1)
         ventana.minSize = NSSize(width: 820, height: 600)
         ventana.contentView = web

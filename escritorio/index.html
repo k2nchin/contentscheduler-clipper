@@ -18,12 +18,15 @@
     --ok:#5EE6A8; --warn:#FFC65C; --red:#FF6B6B; --r:14px;
   }
   *{box-sizing:border-box}
+  /* Deslizadores y casillas en el rosa de la marca, no en el azul del sistema. */
+  input[type=range],input[type=checkbox]{accent-color:var(--accent)}
+  input[type=range]{width:100%}
   body{
     margin:0; background:var(--bg); color:var(--fg);
     font-family:Nunito,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     font-size:15px; line-height:1.5;
   }
-  .wrap{max-width:1100px; margin:0 auto; padding:24px 16px 80px}
+  .wrap{max-width:1400px; margin:0 auto; padding:24px 20px 80px}
   header{display:flex; align-items:center; gap:12px; margin-bottom:28px}
   header img{width:34px; height:34px; border-radius:9px}
   header h1{font-size:19px; font-weight:800; margin:0; letter-spacing:-.01em}
@@ -67,7 +70,8 @@
   .bar{height:7px; background:var(--bg3); border-radius:99px; overflow:hidden; margin:10px 0}
   .bar i{display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--violet)); width:0; transition:width .4s}
 
-  .clips{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px}
+  .clips{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px}
+  @media (min-width:1500px){ .clips{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))} }
   .clip{background:var(--bg2); border:1px solid var(--line); border-radius:12px; overflow:hidden}
   .clip.on{border-color:var(--accent)}
   .clip video{width:100%; aspect-ratio:9/16; object-fit:cover; background:#000; display:block}
@@ -85,7 +89,9 @@
   .sbar .t i{display:block; height:100%; background:var(--accent)}
 
   dialog{background:var(--bg2); color:var(--fg); border:1px solid var(--line); border-radius:var(--r);
-         padding:20px; max-width:480px; width:92%}
+         padding:22px; max-width:560px; width:92%;
+         /* En una ventana baja, el estudio no cabía y no se podía desplazar. */
+         max-height:86vh; overflow-y:auto}
   dialog::backdrop{background:#000a; backdrop-filter:blur(3px)}
   dialog h3{margin:0 0 4px; font-size:17px}
 
