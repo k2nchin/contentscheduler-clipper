@@ -639,6 +639,8 @@ services:
       - CLIPS_DIR=/app/uploads/clips
       - DRIVE_BORRAR_LOCAL=${DRIVE_BORRAR_LOCAL:-false}
       - DRIVE_INTERVALO=${DRIVE_INTERVALO:-15}
+      # Con marca de agua puesta, no se sube nada hasta que la lleve.
+      - DRIVE_ESPERAR_MARCA=${MARCA_ARCHIVO:+true}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -659,6 +661,26 @@ services:
       - OPCIONES_JSON=${OPCIONES_JSON:-}
     depends_on:
       - backend
+
+  # Pone tu marca de agua en cada clip que sale del motor. El motor no marca
+  # nada por su cuenta. Las marcas van en marca/marcas/ y se elige cuál con
+  # MARCA_ARCHIVO; sin eso, este servicio no toca nada.
+  marca:
+    build: ./marca
+    container_name: supoclip-marca
+    profiles: ["marca"]
+    volumes:
+      - uploads:/app/uploads
+      - ./marca/marcas:/marcas:ro
+    environment:
+      - CLIPS_DIR=/app/uploads/clips
+      - MARCAS_DIR=/marcas
+      - MARCA_ARCHIVO=${MARCA_ARCHIVO:-}
+      - MARCA_POSICION=${MARCA_POSICION:-abajo-derecha}
+      - MARCA_ANCHO=${MARCA_ANCHO:-22}
+      - MARCA_OPACIDAD=${MARCA_OPACIDAD:-0.75}
+      - MARCA_MARGEN=${MARCA_MARGEN:-4}
+    restart: unless-stopped
 
   # Redis for caching and job queues (useful for video processing)
   redis:

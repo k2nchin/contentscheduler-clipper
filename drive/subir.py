@@ -56,6 +56,7 @@ ESPERA_ESTABLE = 6
 # Para poder nombrar las carpetas con el video del que salió cada clip.
 BD = os.getenv("DRIVE_DATABASE_URL", "postgresql://supoclip:supoclip_password@postgres:5432/supoclip")
 ORGANIZAR = os.getenv("DRIVE_ORGANIZAR", "true").lower() != "false"
+ESPERAR_MARCA = os.getenv("DRIVE_ESPERAR_MARCA", "").lower() == "true"
 
 # Carpetas de Drive ya creadas, para no preguntar por cada clip.
 _carpetas: dict[str, str] = {}
@@ -264,6 +265,10 @@ def vuelta(creds) -> None:
         if not clip.is_file() or clip.suffix.lower() not in EXTENSIONES:
             continue
         if testigo(clip).exists() or not estable(clip):
+            continue
+        # Con marca de agua configurada, se espera a que la lleve: subir el clip
+        # sin marcar y marcarlo después dejaría en Drive la versión sin marca.
+        if ESPERAR_MARCA and not clip.with_suffix(clip.suffix + ".marca").exists():
             continue
         destino = CARPETA
         etiqueta = ""
