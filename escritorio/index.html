@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Content Scheduler — Herramientas</title>
 <link rel="icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#070708">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -91,6 +94,11 @@
          font-size:14px; opacity:0; pointer-events:none; transition:.25s; max-width:90vw; text-align:center; z-index:99}
   #toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
   .hide{display:none !important}
+  .suelta{border:2px dashed var(--line); border-radius:12px; padding:30px 20px; text-align:center;
+          transition:.15s; cursor:pointer}
+  .suelta:hover,.suelta.encima{border-color:var(--accent); background:#140a10}
+  .suelta p{margin:0; font-size:14px}
+  .suelta a{color:var(--accent)}
   .jobs{display:flex; flex-direction:column; gap:7px}
   .job{display:flex; gap:10px; align-items:center; background:var(--bg3); border-radius:10px; padding:9px 12px;
        cursor:pointer; font-size:13.5px}
@@ -122,6 +130,19 @@
       <button class="p" id="btnIr" onclick="empezar()">Clipear</button>
     </div>
     <p class="hint">Videos ya subidos. Los directos no, porque hace falta el video entero para elegir los momentos.</p>
+  </div>
+
+  <div class="card" id="zona">
+    <h2>O un video tuyo</h2>
+    <div id="suelta" class="suelta">
+      <input type="file" id="archivo" accept="video/*" hidden>
+      <p><b>Arrastra un video aquí</b> o <a href="#" id="elegir">búscalo en el ordenador</a></p>
+      <p class="hint" style="margin-top:6px">MP4, MOV o MKV. Se sube a tu propio motor, no sale de aquí.</p>
+    </div>
+    <div id="subiendo" class="hide">
+      <div class="bar"><i id="barraSubida"></i></div>
+      <div class="hint" id="textoSubida" style="margin-top:0"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -369,10 +390,69 @@ async function cargarPlantillas() {
   $('plantilla').innerHTML = t.map(p => `<option value="${p.id}">${p.name || p.id}</option>`).join('');
 }
 
+// ───────────────────────── Un video de tu ordenador ─────────────────────────
+
+const suelta = $('suelta');
+$('elegir').onclick = e => { e.preventDefault(); $('archivo').click(); };
+suelta.onclick = () => $('archivo').click();
+$('archivo').onchange = e => { if (e.target.files[0]) subirArchivo(e.target.files[0]); };
+
+['dragenter', 'dragover'].forEach(ev => suelta.addEventListener(ev, e => {
+  e.preventDefault(); suelta.classList.add('encima');
+}));
+['dragleave', 'drop'].forEach(ev => suelta.addEventListener(ev, e => {
+  e.preventDefault(); suelta.classList.remove('encima');
+}));
+suelta.addEventListener('drop', e => {
+  const f = [...(e.dataTransfer?.files || [])].find(x => x.type.startsWith('video/'));
+  if (f) subirArchivo(f); else aviso('Eso no es un video.');
+});
+
+/// Sube el archivo al motor y, cuando está, le encarga los clips.
+function subirArchivo(archivo) {
+  if (!S.clave) return aviso('Pon la clave en Ajustes antes de subir nada.');
+  $('suelta').classList.add('hide');
+  $('subiendo').classList.remove('hide');
+  $('textoSubida').textContent = `Subiendo ${archivo.name}…`;
+
+  const datos = new FormData();
+  datos.append('video', archivo, archivo.name);
+  const x = new XMLHttpRequest();
+  x.open('POST', S.servidor.replace(/\/$/, '') + '/upload');
+  x.setRequestHeader('Authorization', 'Bearer ' + S.clave);
+
+  // fetch() no sabe decir cuánto lleva subido; XMLHttpRequest sí.
+  x.upload.onprogress = e => {
+    if (!e.lengthComputable) return;
+    const p = Math.round(e.loaded / e.total * 100);
+    $('barraSubida').style.width = p + '%';
+    $('textoSubida').textContent = `Subiendo ${archivo.name} — ${p}%`;
+  };
+  x.onload = () => {
+    restaurarZona();
+    if (x.status >= 300) {
+      let d = {}; try { d = JSON.parse(x.responseText); } catch {}
+      return aviso(d.detail || `El motor rechazó el archivo (error ${x.status}).`);
+    }
+    let r = {}; try { r = JSON.parse(x.responseText); } catch {}
+    if (!r.video_path) return aviso('El motor no dijo dónde quedó el archivo.');
+    empezar(r.video_path);
+  };
+  x.onerror = () => { restaurarZona(); aviso('Se cortó la subida.'); };
+  x.send(datos);
+}
+
+function restaurarZona() {
+  $('suelta').classList.remove('hide');
+  $('subiendo').classList.add('hide');
+  $('barraSubida').style.width = '0';
+  $('archivo').value = '';
+}
+
 // ───────────────────────── Clipear ─────────────────────────
-async function empezar() {
-  const link = $('link').value.trim();
-  if (!link) return aviso('Pega el link de un video.');
+async function empezar(referencia) {
+  const link = typeof referencia === 'string' ? referencia : $('link').value.trim();
+  if (!link) return aviso('Pega el link de un video o arrastra un archivo.');
   if (S.modo === 'topic' && !$('tema').value.trim()) return aviso('Dile de qué tiene que hablar el clip.');
 
   const cuerpo = {
@@ -608,6 +688,11 @@ cargarModos();
 cargarPlantillas();
 elegirModo('highlights');
 comprobar();
+
+// Para que Windows y Mac ofrezcan instalarla como app de verdad.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

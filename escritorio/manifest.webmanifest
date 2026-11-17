@@ -1,0 +1,16 @@
+{
+  "name": "Content Scheduler — Herramientas de clipping",
+  "short_name": "Content Scheduler",
+  "description": "Corta clips de tus videos largos con subtítulos y encuadre automático.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070708",
+  "theme_color": "#070708",
+  "lang": "es",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
