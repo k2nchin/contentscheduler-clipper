@@ -208,6 +208,12 @@ export default function TaskPage() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
+  // The real reason the worker stored. Without it a failure reads the same
+  // whatever went wrong, and there is nothing to act on.
+  const failureDetail = task?.status === "error" && progressMessage.trim() !== ""
+    && progressMessage.trim() !== failedBody.trim()
+    ? progressMessage.trim()
+    : null;
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -1034,6 +1040,9 @@ export default function TaskPage() {
           />
         ) : task.status === "error" && clips.length === 0 ? (
           <EmptyState tone="error" icon={<AlertCircle className="size-7" />} title={t("failedTitle")} body={failedBody}>
+            {failureDetail && (
+              <p className="mb-2 max-w-md text-sm text-muted-foreground">{failureDetail}</p>
+            )}
             <Button asChild variant="outline"><Link href="/"><ArrowLeft className="size-4" />{t("backHome")}</Link></Button>
           </EmptyState>
         ) : clips.length === 0 ? (
@@ -1077,6 +1086,9 @@ export default function TaskPage() {
               <div role="status" className="mb-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
                 <p className="font-medium">{t("failedTitle")}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{failedBody}</p>
+                {failureDetail && (
+                  <p className="mt-1 text-sm text-muted-foreground">{failureDetail}</p>
+                )}
               </div>
             )}
                         {workflow === "topic" && topicName && (
